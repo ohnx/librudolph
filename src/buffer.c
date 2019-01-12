@@ -1,14 +1,24 @@
-#include <stdlib.h>
-#include <string.h>
-#include <stdarg.h>
 #include <rudolph/buffer.h>
 
-__inline buf_t *buffer_init() {
-    return buffer_initsz(BUF_DEFAULT);
+#ifdef RUDOLF_USE_STDLIB
+/* for malloc(), free(), realloc() */
+#include <stdlib.h>
+/* for memcpy() */
+#include <string.h>
+/* for va_start(), va_end(), va_arg() */
+#include <stdarg.h>
+/* for size_t */
+#include <stddef.h>
+#else
+#include <rudolph/own_stdlib.h>
+#endif
+
+__inline rd_buf_t *rd_buffer_init() {
+    return rd_buffer_initsz(__RD_BUF_DEFAULT);
 }
 
-buf_t *buffer_initsz(size_t n) {
-    buf_t *buf;
+rd_buf_t *rd_buffer_initsz(size_t n) {
+    rd_buf_t *buf;
 
     /* allocate enough space */
     buf = malloc(sizeof(*buf) + n);
@@ -23,59 +33,59 @@ buf_t *buffer_initsz(size_t n) {
     return buf;
 }
 
-void buffer_free(buf_t *buf) {
+void rd_buffer_free(rd_buf_t *buf) {
     free(buf);
 }
 
-int buffer_push(buf_t **pbuf, const unsigned char *data, size_t len) {
+int rd_buffer_push(rd_buf_t **pbuf, const unsigned char *data, size_t len) {
     size_t d;
     void *t;
 
     /* sanity check */
-    if (!pbuf) return E_BUF_NONSENSE;
+    if (!pbuf) return RD_E_BUF_NONSENSE;
     if (!(*pbuf)) {
         /* allocate space for new buffer */
-        *pbuf = buffer_init();
-        if (!(*pbuf)) return E_BUF_OOM;
+        *pbuf = rd_buffer_init();
+        if (!(*pbuf)) return RD_E_BUF_OOM;
     }
 
     /* first check the remaining space */
     d = (*pbuf)->len + len;
     if (len > d || (*pbuf)->len > d) {
-        return E_BUF_OVERFLOW;
+        return RD_E_BUF_OVERFLOW;
     }
 
     /* check if realloc needed */
     if (d > (*pbuf)->alloc) {
         t = realloc(*pbuf, sizeof(*(*pbuf)) + (*pbuf)->alloc*2);
-        if (t == NULL) return E_BUF_OOM;
-        *pbuf = (buf_t *)t;
+        if (t == NULL) return RD_E_BUF_OOM;
+        *pbuf = (rd_buf_t *)t;
     }
 
     /* copy over the data */
-    memcpy(buffer_data(*pbuf)+(*pbuf)->len, data, len);
+    memcpy(rd_buffer_data(*pbuf)+(*pbuf)->len, data, len);
 
     /* increment length */
     (*pbuf)->len = d;
 
-    return E_BUF_OK;
+    return RD_E_BUF_OK;
 }
 
-int buffer_merge(buf_t **pbuf, size_t n, ...) {
+int rd_buffer_merge(rd_buf_t **pbuf, size_t n, ...) {
     va_list args;
-    buf_t *q, *p;
+    rd_buf_t *q, *p;
     size_t i;
     int z;
 
     /* sanity check */
-    if (!pbuf) return E_BUF_NONSENSE;
+    if (!pbuf) return RD_E_BUF_NONSENSE;
 
     /* allocate space for new buffer */
-    q = buffer_init();
-    if (!q) return E_BUF_OOM;
+    q = rd_buffer_init();
+    if (!q) return RD_E_BUF_OOM;
 
     /* copy over the old buffer if necessary */
-    if (*pbuf) buffer_push(&q, buffer_data(*pbuf), (*pbuf)->len);
+    if (*pbuf) rd_buffer_push(&q, rd_buffer_data(*pbuf), (*pbuf)->len);
 
     /* start reading in the args */
     va_start(args, n);
@@ -83,20 +93,20 @@ int buffer_merge(buf_t **pbuf, size_t n, ...) {
     /* loop through all arguments */
     for (i = 0; i < n; i++) {
         /* fetch this argument */
-        p = va_arg(args, buf_t *);
+        p = va_arg(args, rd_buf_t *);
 
         /* merge the buffers */
-        z = buffer_push(&q, buffer_data(p), p->len);
+        z = rd_buffer_push(&q, rd_buffer_data(p), p->len);
         if (z) goto done;
     }
 
-    /* z = E_BUF_OK means no error */
-    z = E_BUF_OK;
+    /* z = RD_E_BUF_OK means no error */
+    z = RD_E_BUF_OK;
 
 done:
     va_end(args);
 
-    if (z < E_BUF_OK) {
+    if (z < RD_E_BUF_OK) {
         /* errored out */
 
         /* free the buffer */
@@ -115,12 +125,12 @@ done:
     return z;
 }
 
-void buffer_reset(buf_t *buf) {
+void rd_buffer_reset(rd_buf_t *buf) {
     /* reset the length */
     if (buf) buf->len = 0;
 }
 
-/* tests - compile with gcc src/buffer.c -I include/ -D__TEST -o objs/buffer.c.test */
+/* tests - compile with gcc src/buffer.c -I include/ -D__TEST -DRUDOLF_USRD_E_STDLIB -o objs/buffer.c.test */
 #ifdef __TEST
 #include <stdio.h>
 #include <stdlib.h>
@@ -131,17 +141,17 @@ void die(int line) {
 }
 
 int main() {
-    buf_t *m, *q, *r;
-    m = buffer_init();
-    q = buffer_init();
-    r = buffer_init();
+    rd_buf_t *m, *q, *r;
+    m = rd_buffer_init();
+    q = rd_buffer_init();
+    r = rd_buffer_init();
 
     fprintf(stderr, "testing buffer.c...\t");
 
-    if (buffer_push(&m, "potat|o", 5) != E_BUF_OK) die(__LINE__);
-    if (buffer_push(&q, "o", 2) != E_BUF_OK) die(__LINE__);
-    if (buffer_merge(&r, 2, m, q) != E_BUF_OK) die(__LINE__);
-    if (strncmp("potato",buffer_data(r),r->len)) die(__LINE__);
+    if (rd_buffer_push(&m, "potat|o", 5) != RD_E_BUF_OK) die(__LINRD_E__);
+    if (rd_buffer_push(&q, "o", 2) != RD_E_BUF_OK) die(__LINRD_E__);
+    if (rd_buffer_merge(&r, 2, m, q) != RD_E_BUF_OK) die(__LINRD_E__);
+    if (strncmp("potato",rd_buffer_data(r),r->len)) die(__LINRD_E__);
 
     free(m);
     free(q);

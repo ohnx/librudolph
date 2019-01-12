@@ -7,7 +7,7 @@
 /* this test will produce an elf file */
 int main() {
     FILE *fp;
-    buf_t *buffer, *a, *b, *c, *d, *e, *f, *g;
+    rd_buf_t *buffer, *a, *b, *c, *d, *e, *f, *g;
     struct rd_elfhdr64 *hdr;
     struct rd_prghdr64 *prg;
     struct rd_sechdr64 *sec;
@@ -27,17 +27,17 @@ int main() {
         0x0F, 0x05 /* syscall */
     };
     unsigned char echo_msg[] = {
-        'H', 'e', 'l', 'l', 'o', ',', ' ', 'W', 'o', 'r', 'l', 'd', '!', '\n', 0x00 /* null terminator technically not neeeded*/
+        'H', 'e', 'l', 'l', 'o', ',', ' ', 'W', 'o', 'r', 'l', 'd', '!', '\n' /* null terminator technically not neeeded*/
     };
 
     /* setup */
     fp = fopen("a.out", "wb");
-    buffer = buffer_init();
+    buffer = rd_buffer_init();
     if (!fp || !buffer) { fprintf(stderr, "oops, die.\n"); exit(-1); }
 
     /* first thing is to is to make the header */
-    a = buffer_initsz(sizeof(struct rd_elfhdr64));
-    hdr = (struct rd_elfhdr64 *)buffer_data(a);
+    a = rd_buffer_initsz(sizeof(struct rd_elfhdr64));
+    hdr = (struct rd_elfhdr64 *)rd_buffer_data(a);
     hdr->magic[0] = 0x7F;
     hdr->magic[1] = 'E';
     hdr->magic[2] = 'L';
@@ -63,8 +63,8 @@ int main() {
     a->len = a->alloc;
 
     /* now we make a program header to tell the system to load our executable */
-    b = buffer_initsz(sizeof(struct rd_prghdr64));
-    prg = (struct rd_prghdr64 *)buffer_data(b);
+    b = rd_buffer_initsz(sizeof(struct rd_prghdr64));
+    prg = (struct rd_prghdr64 *)rd_buffer_data(b);
     prg->type = RD_PRGHDR_TYPE_LOAD; /* we want the entire elf to be loaded */
     prg->flags = RD_PRGHDR_FLAGS_X | RD_PRGHDR_FLAGS_R; /* read and execute */
     prg->offset = 0x0; /* offset in the file - we can just map the entire file */
@@ -75,9 +75,13 @@ int main() {
     prg->alignment = 0x200000; /* map to the nearest 2MiB block */
     b->len = b->alloc;
 
+    /* TODO: it appears as if, to optimize memory space, only the elf header and program header are before the code. */
+    /* this would decrease the program size to a+b+<code> */
+    /* do the same thing here */
+
     /* now come the section headers... first up, a null sentinel */
-    c = buffer_initsz(sizeof(struct rd_sechdr64));
-    sec = (struct rd_sechdr64 *)buffer_data(c);
+    c = rd_buffer_initsz(sizeof(struct rd_sechdr64));
+    sec = (struct rd_sechdr64 *)rd_buffer_data(c);
     sec->name = 0; /* tbd; will be pointer to a null */
     sec->type = RD_SECHDR_TYPE_NULL; /* null sentinel */
     sec->flags = 0; /* all values are 0 */
@@ -91,8 +95,8 @@ int main() {
     c->len = c->alloc;
 
     /* now the code itself */
-    d = buffer_initsz(sizeof(struct rd_sechdr64));
-    sec = (struct rd_sechdr64 *)buffer_data(d);
+    d = rd_buffer_initsz(sizeof(struct rd_sechdr64));
+    sec = (struct rd_sechdr64 *)rd_buffer_data(d);
     sec->name = 0; /* tbd; will point to string ".text" */
     sec->type = RD_SECHDR_TYPE_PROGBITS; /* this section contains program code */
     sec->flags = RD_SECHDR_FLAGS_ALLOC | RD_SECHDR_FLAGS_EXECINSTR; /* allocate space for this section in memory and execute it */
@@ -106,8 +110,8 @@ int main() {
     d->len = d->alloc;
 
     /* finally, the text strings */
-    e = buffer_initsz(sizeof(struct rd_sechdr64));
-    sec = (struct rd_sechdr64 *)buffer_data(e);
+    e = rd_buffer_initsz(sizeof(struct rd_sechdr64));
+    sec = (struct rd_sechdr64 *)rd_buffer_data(e);
     sec->name = 0; /* tbd; will point to string ".shstr" */
     sec->type = RD_SECHDR_TYPE_STRTAB; /* this section contains strings for the elf reader */
     sec->flags = 0; /* this section will stay on the disk and will not be mapped into memory */
@@ -120,27 +124,27 @@ int main() {
     sec->entsz = 0; /* ?? */
     e->len = e->alloc;
 
-    f = buffer_init();
-    buffer_push(&f, (const unsigned char *)textstr, strlen(textstr)+1); /* .text first */
-    buffer_push(&f, (const unsigned char *)shstrtabstr, strlen(shstrtabstr)+1); /* then .shstrtab */
+    f = rd_buffer_init();
+    rd_buffer_push(&f, (const unsigned char *)textstr, strlen(textstr)+1); /* .text first */
+    rd_buffer_push(&f, (const unsigned char *)shstrtabstr, strlen(shstrtabstr)+1); /* then .shstrtab */
 
-    g = buffer_init();
-    buffer_push(&g, echo_hello, sizeof(echo_hello)); /* push the code to the buffer */
+    g = rd_buffer_init();
+    rd_buffer_push(&g, echo_hello, sizeof(echo_hello)); /* push the code to the buffer */
     /* this is like a lowkey relocation */
-    *((uint16_t *)(((unsigned char *)buffer_data(g))+12)) = a->len + b->len + c->len + d->len + e->len + f->len + g->len;
-    buffer_push(&g, echo_msg, sizeof(echo_msg)); /* push the data to the buffer */
+    *((uint16_t *)(((unsigned char *)rd_buffer_data(g))+12)) = a->len + b->len + c->len + d->len + e->len + f->len + g->len;
+    rd_buffer_push(&g, echo_msg, sizeof(echo_msg)); /* push the data to the buffer */
 
     /* at this point, a+b+c+d+e is where all the null-terminated strings are */
-    sec = (struct rd_sechdr64 *)buffer_data(c);
+    sec = (struct rd_sechdr64 *)rd_buffer_data(c);
     sec->name = strlen(textstr); /* this will point to exactly null */
 
-    sec = (struct rd_sechdr64 *)buffer_data(e);
+    sec = (struct rd_sechdr64 *)rd_buffer_data(e);
     sec->name = strlen(textstr)+1; /* .text appears first, so skip past it */
     sec->offset = a->len + b->len + c->len + d->len + e->len;
     sec->size = f->len;
 
     /* at this point, a+b+c+d+e is where the executable code begins */
-    sec = (struct rd_sechdr64 *)buffer_data(d);
+    sec = (struct rd_sechdr64 *)rd_buffer_data(d);
     sec->name = 0; /* .text appears first */
     sec->offset = a->len + b->len + c->len + d->len + e->len + f->len;
     sec->addr = prg->vaddr + a->len + b->len + c->len + d->len + e->len + f->len;
@@ -153,20 +157,20 @@ int main() {
     prg->size_file = a->len + b->len + c->len + d->len + e->len + f->len + g->len;
     prg->size_mem = prg->size_file;
 
-    buffer_merge(&buffer, 7, a, b, c, d, e, f, g);
+    rd_buffer_merge(&buffer, 7, a, b, c, d, e, f, g);
 
-    buffer_free(a);
-    buffer_free(b);
-    buffer_free(c);
-    buffer_free(d);
-    buffer_free(e);
-    buffer_free(f);
-    buffer_free(g);
+    rd_buffer_free(a);
+    rd_buffer_free(b);
+    rd_buffer_free(c);
+    rd_buffer_free(d);
+    rd_buffer_free(e);
+    rd_buffer_free(f);
+    rd_buffer_free(g);
 
     /* write file */
-    fwrite(buffer_data(buffer), buffer->len, 1, fp);
+    fwrite(rd_buffer_data(buffer), buffer->len, 1, fp);
     fclose(fp);
-    buffer_free(buffer);
+    rd_buffer_free(buffer);
 
     /* done */
     return 0;
