@@ -15,7 +15,20 @@ int main() {
     const char *shstrtabstr = ".shstrtab";
 
     /* this code calls syscall exit with return code #1 */
-    unsigned char exit1_code[] = { 0xB8, 0x3C, 0x00, 0x00, 0x00, 0xBF, 0x01, 0x00, 0x00, 0x00, 0x0F, 0x05 };
+    /* unsigned char exit1_code[] = { 0xB8, 0x3C, 0x00, 0x00, 0x00, 0xBF, 0x01, 0x00, 0x00, 0x00, 0x0F, 0x05 }; */
+    unsigned char echo_hello[] = {
+        0xB8, 0x01, 0x00, 0x00, 0x00, /* mov eax, 0x1 */
+        0xBF, 0x01, 0x00, 0x00, 0x00, /* mov edi, 0x1 */
+        0x48, 0xBE, 0xA7, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, /* movabs rsi, 0x4000a7*/
+        0xBA, 0x0E, 0x00, 0x00, 0x00, /* mov edx, 0xe (15) */
+        0x0F, 0x05, /* syscall */
+        0xB8, 0x3C, 0x00, 0x00, 0x00, /* mov eax, 0x3c (60) */
+        0xBF, 0x01, 0x00, 0x00, 0x00, /* mov edi, 0x1 */
+        0x0F, 0x05 /* syscall */
+    };
+    unsigned char echo_msg[] = {
+        'H', 'e', 'l', 'l', 'o', ',', ' ', 'W', 'o', 'r', 'l', 'd', '!', '\n', 0x00 /* null terminator technically not neeeded*/
+    };
 
     /* setup */
     fp = fopen("a.out", "wb");
@@ -29,19 +42,19 @@ int main() {
     hdr->magic[1] = 'E';
     hdr->magic[2] = 'L';
     hdr->magic[3] = 'F';
-    hdr->bclass = RD_ELFHDR_BCLASS_64;
-    hdr->endianness = RD_ELFHDR_ENDIANNESS_LITTLE;
+    hdr->bclass = RD_ELFHDR_BCLASS_64; /* 64 bit */
+    hdr->endianness = RD_ELFHDR_ENDIANNESS_LITTLE; /* little endian */
     hdr->version = 1;
-    hdr->abi = RD_ELFHDR_ABI_SYSV;
+    hdr->abi = RD_ELFHDR_ABI_SYSV; /* linux uses sysv a lot of the time */
     hdr->abi_version = 0;
-    hdr->type = RD_ELFHDR_TYPE_EXEC;
-    hdr->machine = RD_ELFHDR_MACHINE_X86_64;
+    hdr->type = RD_ELFHDR_TYPE_EXEC; /* static executable */
+    hdr->machine = RD_ELFHDR_MACHINE_X86_64; /* x86_64 machine code */
     hdr->lversion = 1;
     hdr->entry = 0; /* tbd; aka where the actual executable code begins */
-    hdr->proghdr = 0; /* tbd */
-    hdr->sectionhdr = 0; /* tbd */
+    hdr->proghdr = 0; /* tbd; where the program headers are (offset) */
+    hdr->sectionhdr = 0; /* tbd; where the section headers are (offset) */
     hdr->flags = 0;
-    hdr->hdrsz = 64;
+    hdr->hdrsz = sizeof(struct rd_elfhdr64);
     hdr->prghdrsz = sizeof(struct rd_prghdr64);
     hdr->prghdrnbr = 1;
     hdr->shdrsz = sizeof(struct rd_sechdr64);
@@ -52,22 +65,22 @@ int main() {
     /* now we make a program header to tell the system to load our executable */
     b = buffer_initsz(sizeof(struct rd_prghdr64));
     prg = (struct rd_prghdr64 *)buffer_data(b);
-    prg->type = RD_PRGHDR_TYPE_LOAD;
+    prg->type = RD_PRGHDR_TYPE_LOAD; /* we want the entire elf to be loaded */
     prg->flags = RD_PRGHDR_FLAGS_X | RD_PRGHDR_FLAGS_R; /* read and execute */
-    prg->offset = 0x0;
+    prg->offset = 0x0; /* offset in the file - we can just map the entire file */
     prg->vaddr = 0x0000000000400000; /* mapping to 0x0000000000400000 prevents segfaults, i think */
-    prg->paddr = prg->vaddr;
-    prg->size_file = 0; /* tbd */
-    prg->size_mem = 0; /* tbd */
-    prg->alignment = 0x200000;
-    b->len = b->alloc;    
+    prg->paddr = prg->vaddr; /* physical address is not used */
+    prg->size_file = 0; /* tbd; size of the entire file */
+    prg->size_mem = 0; /* tbd ; size of the block in memory (in this case equal to size_file if we map the entire file) */
+    prg->alignment = 0x200000; /* map to the nearest 2MiB block */
+    b->len = b->alloc;
 
     /* now come the section headers... first up, a null sentinel */
     c = buffer_initsz(sizeof(struct rd_sechdr64));
     sec = (struct rd_sechdr64 *)buffer_data(c);
-    sec->name = 0; /* tbd */
-    sec->type = RD_SECHDR_TYPE_NULL;
-    sec->flags = 0;
+    sec->name = 0; /* tbd; will be pointer to a null */
+    sec->type = RD_SECHDR_TYPE_NULL; /* null sentinel */
+    sec->flags = 0; /* all values are 0 */
     sec->addr = 0;
     sec->offset = 0;
     sec->size = 0;
@@ -80,39 +93,42 @@ int main() {
     /* now the code itself */
     d = buffer_initsz(sizeof(struct rd_sechdr64));
     sec = (struct rd_sechdr64 *)buffer_data(d);
-    sec->name = 0; /* tbd */
-    sec->type = RD_SECHDR_TYPE_PROGBITS;
+    sec->name = 0; /* tbd; will point to string ".text" */
+    sec->type = RD_SECHDR_TYPE_PROGBITS; /* this section contains program code */
     sec->flags = RD_SECHDR_FLAGS_ALLOC | RD_SECHDR_FLAGS_EXECINSTR; /* allocate space for this section in memory and execute it */
-    sec->addr = 0; /* tbd; the entire file will be mmap'd into 0x0 and this is the offset where code begins */
-    sec->offset = 0; /* tbd; this is the same as addr in our simplified case with vaddr = 0x0 */
-    sec->size = 0; /* tbd */
-    sec->link = 0;
-    sec->info = 0;
-    sec->align = 1;
-    sec->entsz = 0;
+    sec->addr = 0; /* tbd; the entire file will be mmap'd into 0x0000000000400000 and this is the offset where code begins */
+    sec->offset = 0; /* tbd; this is the offset where code begins in the file */
+    sec->size = 0; /* tbd; need the length of the program code */
+    sec->link = 0; /* no related sections */
+    sec->info = 0; /* no extra info */
+    sec->align = 1; /* align to the nearest byte */
+    sec->entsz = 0; /* ?? */
     d->len = d->alloc;
 
     /* finally, the text strings */
     e = buffer_initsz(sizeof(struct rd_sechdr64));
     sec = (struct rd_sechdr64 *)buffer_data(e);
-    sec->name = 0; /* tbd */
-    sec->type = RD_SECHDR_TYPE_STRTAB;
-    sec->flags = 0;
-    sec->addr = 0; /* section is not loaded */
-    sec->offset = 0; /* tbd */
-    sec->size = 0; /* tbd */
-    sec->link = 0;
-    sec->info = 0;
-    sec->align = 1;
-    sec->entsz = 0;
+    sec->name = 0; /* tbd; will point to string ".shstr" */
+    sec->type = RD_SECHDR_TYPE_STRTAB; /* this section contains strings for the elf reader */
+    sec->flags = 0; /* this section will stay on the disk and will not be mapped into memory */
+    sec->addr = 0; /* section is not loaded, so no address needed */
+    sec->offset = 0; /* tbd; offset where the strings begin in the file */
+    sec->size = 0; /* tbd; length of the strings part */
+    sec->link = 0; /* not linked to any specific sections */
+    sec->info = 0; /* no extra info */
+    sec->align = 1; /* align to the nearest byte (not really used since it's not mapped to memory) */
+    sec->entsz = 0; /* ?? */
     e->len = e->alloc;
 
     f = buffer_init();
-    buffer_push(&f, (const unsigned char *)textstr, strlen(textstr)+1);
-    buffer_push(&f, (const unsigned char *)shstrtabstr, strlen(shstrtabstr)+1);
+    buffer_push(&f, (const unsigned char *)textstr, strlen(textstr)+1); /* .text first */
+    buffer_push(&f, (const unsigned char *)shstrtabstr, strlen(shstrtabstr)+1); /* then .shstrtab */
 
     g = buffer_init();
-    buffer_push(&g, exit1_code, sizeof(exit1_code));
+    buffer_push(&g, echo_hello, sizeof(echo_hello)); /* push the code to the buffer */
+    /* this is like a lowkey relocation */
+    *((uint16_t *)(((unsigned char *)buffer_data(g))+12)) = a->len + b->len + c->len + d->len + e->len + f->len + g->len;
+    buffer_push(&g, echo_msg, sizeof(echo_msg)); /* push the data to the buffer */
 
     /* at this point, a+b+c+d+e is where all the null-terminated strings are */
     sec = (struct rd_sechdr64 *)buffer_data(c);
@@ -126,11 +142,11 @@ int main() {
     /* at this point, a+b+c+d+e is where the executable code begins */
     sec = (struct rd_sechdr64 *)buffer_data(d);
     sec->name = 0; /* .text appears first */
-    sec->addr = a->len + b->len + c->len + d->len + e->len + f->len;
-    sec->offset = sec->addr;
+    sec->offset = a->len + b->len + c->len + d->len + e->len + f->len;
+    sec->addr = prg->vaddr + a->len + b->len + c->len + d->len + e->len + f->len;
     sec->size = g->len;
 
-    hdr->entry = prg->vaddr + a->len + b->len + c->len + d->len + e->len + f->len;
+    hdr->entry = sec->addr;
     hdr->proghdr = a->len;
     hdr->sectionhdr = a->len + b->len;
 
