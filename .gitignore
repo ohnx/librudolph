@@ -1,2 +1,5 @@
 objs/
 a.out
+*.o
+test
+*.a
