@@ -15,13 +15,13 @@ $(OUTPUT): $(OBJS)
 
 .PHONY: clean
 clean:
-	rm -rf objs/ $(OUTPUT)
+	rm -rf objs/ $(OUTPUT) test
 
 .PHONY: debug
 debug: CFLAGS += -D__DEBUG -g -O0
 debug: default
 
-
 .PHONY: test
 test: debug
-	$(CC) -o $@ tests/main.c $(OUTPUT) $(CFLAGS)
+	$(CC) -o $@ tests/main.c $(OUTPUT) $(CFLAGS) -D__DEBUG -g -O0
+	./test
