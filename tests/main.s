@@ -1,17 +1,19 @@
-; compile with nasm main.s -felf64 then ld main.o -o main
-section	.text
-    global _start
+.section    .text
+.global     _start
 
 _start:
-    mov     eax, 0x01   ; write
-    mov     edi, 0x01   ; to stdout
-    mov     rsi, msg    ; the message
-    mov     edx, 0xe    ; 14 bytes
-    syscall
+    mov r0, #1 /* stdout */
+    ldr r1, vs1
+    ldr r2, vs2
+    mov r7, #4 /* syscall for write */
+    swi #0
 
-    mov     eax, 0x3c   ; exit
-    mov     edi, 0x01   ; with return code 1
-    syscall
+    mov r0, #0 /* output 0 */
+    mov r7, #1 /* syscall for exit */
+    swi #0
 
-msg db `Hello, World!\n`
+vs1:
+    andeq	r0, r0, r0
 
+vs2:
+    andeq	r0, r0, r0

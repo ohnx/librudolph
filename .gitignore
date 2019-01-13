@@ -1,5 +1,5 @@
 objs/
-a.out
+*.out
 *.o
 test
 *.a
