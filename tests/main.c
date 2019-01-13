@@ -79,9 +79,15 @@ int main() {
     /* this would decrease the program size to a+b+<code> */
     /* do the same thing here */
 
+    c = rd_buffer_init();
+    rd_buffer_push(&c, echo_hello, sizeof(echo_hello)); /* push the code to the buffer */
+    /* this is like a lowkey relocation */
+    *((uint16_t *)(((unsigned char *)rd_buffer_data(c))+12)) = a->len + b->len + c->len;
+    rd_buffer_push(&c, echo_msg, sizeof(echo_msg)); /* push the data to the buffer */
+
     /* now come the section headers... first up, a null sentinel */
-    c = rd_buffer_initsz(sizeof(struct rd_sechdr64));
-    sec = (struct rd_sechdr64 *)rd_buffer_data(c);
+    d = rd_buffer_initsz(sizeof(struct rd_sechdr64));
+    sec = (struct rd_sechdr64 *)rd_buffer_data(d);
     sec->name = 0; /* tbd; will be pointer to a null */
     sec->type = RD_SECHDR_TYPE_NULL; /* null sentinel */
     sec->flags = 0; /* all values are 0 */
@@ -92,11 +98,11 @@ int main() {
     sec->info = 0;
     sec->align = 0;
     sec->entsz = 0;
-    c->len = c->alloc;
+    d->len = d->alloc;
 
     /* now the code itself */
-    d = rd_buffer_initsz(sizeof(struct rd_sechdr64));
-    sec = (struct rd_sechdr64 *)rd_buffer_data(d);
+    e = rd_buffer_initsz(sizeof(struct rd_sechdr64));
+    sec = (struct rd_sechdr64 *)rd_buffer_data(e);
     sec->name = 0; /* tbd; will point to string ".text" */
     sec->type = RD_SECHDR_TYPE_PROGBITS; /* this section contains program code */
     sec->flags = RD_SECHDR_FLAGS_ALLOC | RD_SECHDR_FLAGS_EXECINSTR; /* allocate space for this section in memory and execute it */
@@ -107,11 +113,11 @@ int main() {
     sec->info = 0; /* no extra info */
     sec->align = 1; /* align to the nearest byte */
     sec->entsz = 0; /* ?? */
-    d->len = d->alloc;
+    e->len = e->alloc;
 
     /* finally, the text strings */
-    e = rd_buffer_initsz(sizeof(struct rd_sechdr64));
-    sec = (struct rd_sechdr64 *)rd_buffer_data(e);
+    f = rd_buffer_initsz(sizeof(struct rd_sechdr64));
+    sec = (struct rd_sechdr64 *)rd_buffer_data(f);
     sec->name = 0; /* tbd; will point to string ".shstr" */
     sec->type = RD_SECHDR_TYPE_STRTAB; /* this section contains strings for the elf reader */
     sec->flags = 0; /* this section will stay on the disk and will not be mapped into memory */
@@ -122,40 +128,37 @@ int main() {
     sec->info = 0; /* no extra info */
     sec->align = 1; /* align to the nearest byte (not really used since it's not mapped to memory) */
     sec->entsz = 0; /* ?? */
-    e->len = e->alloc;
-
-    f = rd_buffer_init();
-    rd_buffer_push(&f, (const unsigned char *)textstr, strlen(textstr)+1); /* .text first */
-    rd_buffer_push(&f, (const unsigned char *)shstrtabstr, strlen(shstrtabstr)+1); /* then .shstrtab */
+    f->len = f->alloc;
 
     g = rd_buffer_init();
-    rd_buffer_push(&g, echo_hello, sizeof(echo_hello)); /* push the code to the buffer */
-    /* this is like a lowkey relocation */
-    *((uint16_t *)(((unsigned char *)rd_buffer_data(g))+12)) = a->len + b->len + c->len + d->len + e->len + f->len + g->len;
-    rd_buffer_push(&g, echo_msg, sizeof(echo_msg)); /* push the data to the buffer */
+    rd_buffer_push(&g, (const unsigned char *)textstr, strlen(textstr)+1); /* .text first */
+    rd_buffer_push(&g, (const unsigned char *)shstrtabstr, strlen(shstrtabstr)+1); /* then .shstrtab */
 
     /* at this point, a+b+c+d+e is where all the null-terminated strings are */
-    sec = (struct rd_sechdr64 *)rd_buffer_data(c);
+    /* null section */
+    sec = (struct rd_sechdr64 *)rd_buffer_data(d);
     sec->name = strlen(textstr); /* this will point to exactly null */
 
-    sec = (struct rd_sechdr64 *)rd_buffer_data(e);
+    /* section header string section */
+    sec = (struct rd_sechdr64 *)rd_buffer_data(f);
     sec->name = strlen(textstr)+1; /* .text appears first, so skip past it */
-    sec->offset = a->len + b->len + c->len + d->len + e->len;
-    sec->size = f->len;
-
-    /* at this point, a+b+c+d+e is where the executable code begins */
-    sec = (struct rd_sechdr64 *)rd_buffer_data(d);
-    sec->name = 0; /* .text appears first */
     sec->offset = a->len + b->len + c->len + d->len + e->len + f->len;
-    sec->addr = prg->vaddr + a->len + b->len + c->len + d->len + e->len + f->len;
     sec->size = g->len;
+
+    /* at this point, a+b is where the executable code begins */
+    /* text section */
+    sec = (struct rd_sechdr64 *)rd_buffer_data(e);
+    sec->name = 0; /* .text appears first */
+    sec->offset = a->len + b->len;
+    sec->addr = prg->vaddr + sec->offset;
+    sec->size = c->len;
+
+    prg->size_file = a->len + b->len + c->len;
+    prg->size_mem = prg->size_file;
 
     hdr->entry = sec->addr;
     hdr->proghdr = a->len;
-    hdr->sectionhdr = a->len + b->len;
-
-    prg->size_file = a->len + b->len + c->len + d->len + e->len + f->len + g->len;
-    prg->size_mem = prg->size_file;
+    hdr->sectionhdr = a->len + b->len + c->len;
 
     rd_buffer_merge(&buffer, 7, a, b, c, d, e, f, g);
 

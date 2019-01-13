@@ -1,4 +1,4 @@
-; compile with nasm gcc -static -nostdlib main.s -masm=intel
+; compile with nasm main.s -felf64 then ld main.o -o main
 section	.text
     global _start
 
