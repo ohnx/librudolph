@@ -12,15 +12,17 @@
 
 /* relocation management */
 enum rd_elf_link_relocation_type {
-    RELOC_NULL = 0, /* used to signify end of list */
-    RELOC_TEXT8,    /* a text relocation will fill in an address to the text (code) */
-    RELOC_TEXT16,   /* a text relocation will fill in an address to the text (code) */
-    RELOC_TEXT32,   /* a text relocation will fill in an address to the text (code) */
-    RELOC_TEXT64,   /* a text relocation will fill in an address to the text (code) */
-    RELOC_DATA8,    /* a data relocation will fill in an address to the data */
-    RELOC_DATA16,   /* a data relocation will fill in an address to the data */
-    RELOC_DATA32,   /* a data relocation will fill in an address to the data */
-    RELOC_DATA64    /* a data relocation will fill in an address to the data */
+    RELOC_NULL = 0,     /* used to signify end of list */
+    RELOC_TEXT32,    /* an absolute text relocation will fill in an address to the text (code) */
+    RELOC_TEXT64,    /* an absolute text relocation will fill in an address to the text (code) */
+    RELOC_DATA8,        /* a data relocation will fill in an address to the data */
+    RELOC_DATA16,       /* a data relocation will fill in an address to the data */
+    RELOC_DATA32,       /* a data relocation will fill in an address to the data */
+    RELOC_DATA64,       /* a data relocation will fill in an address to the data */
+    RELOC_CUSTOM8,      /* a custom relocation will write src to target */
+    RELOC_CUSTOM16,     /* a custom relocation will write src to target */
+    RELOC_CUSTOM32,     /* a custom relocation will write src to target */
+    RELOC_CUSTOM64      /* a custom relocation will write src to target */
 };
 
 struct rd_elf_link_relocation {

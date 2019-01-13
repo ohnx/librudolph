@@ -3,22 +3,22 @@
 #include <rudolph/buffer.h>
 #include <rudolph/error.h>
 
+#include <stdio.h>
+
 /* TODO - allow custom base_addr's other than 4MiB?? */
 int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_elf_link_relocation *relocs, rd_buf_t **res) {
     int n;
     rd_buf_t *a, *b, *c, *d, *e, *f, *g, *h, *i;
     struct rd_elfhdr64 *hdr;
     struct rd_elf_prghdr64 *prg;
-    struct rd_elf_sechdr64 *sec_null, *sec_text, /* todo nyi *sec_data, */*sec_shst;
+    struct rd_elf_sechdr64 *sec_null, *sec_text, *sec_data, *sec_shst;
+    static const unsigned char shstrtab_strnull[] = "";
     static const unsigned char shstrtab_strtext[] = ".text";
     static const unsigned char shstrtab_strdata[] = ".data";
     static const unsigned char shstrtab_strshst[] = ".shstrtab";
     struct rd_elf_link_relocation *reloc;
 
     if (!res) { return RD_E_NONSENSE; }
-
-    /* TODO - add support for data section */
-    if (data) { return RD_E_NONSENSE; }
 
     /* initialize variables */
     a = NULL; b = NULL; c = NULL; d = NULL; e = NULL; f = NULL; g = NULL; h = NULL; i = NULL;
@@ -33,15 +33,14 @@ int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_el
     if (n != RD_E_OK) goto die;
     prg = (struct rd_elf_prghdr64 *)rd_buffer_data(b);
 
-    /* now we have the code section, but make a copy since we will modify it for relocations */
+    /* now we have the text section, but make a copy since we will modify it for relocations */
     c = rd_buffer_initsz(text->len);
     if (!c) { n = RD_E_OOM; goto die; }
     n = rd_buffer_push(&c, rd_buffer_data(text), text->len);
     if (n != RD_E_OK) goto die;
 
-    /* todo nyi - data */
-    d = rd_buffer_init();
-    if (!d) { n = RD_E_OOM; goto die; }
+    /* now we have the data section */
+    d = data;
 
     /* now the null section */
     n = rd_elf_link_genelfsec64(RD_ELF_SECHDR_TYPE_NULL, &e);
@@ -52,10 +51,13 @@ int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_el
     n = rd_elf_link_genelfsec64(RD_ELF_SECHDR_TYPE_PROGBITS, &f);
     if (n != RD_E_OK) goto die;
     sec_text = (struct rd_elf_sechdr64 *)rd_buffer_data(f);
+    sec_text->flags |= RD_ELF_SECHDR_FLAGS_EXECINSTR;
 
-    /* todo nyi - data section is g */
-    g = rd_buffer_init();
-    if (!g) { n = RD_E_OOM; goto die; }
+    /* data section */
+    n = rd_elf_link_genelfsec64(RD_ELF_SECHDR_TYPE_PROGBITS, &g);
+    if (n != RD_E_OK) goto die;
+    sec_data = (struct rd_elf_sechdr64 *)rd_buffer_data(g);
+    sec_data->flags |= RD_ELF_SECHDR_FLAGS_WRITE;
 
     /* section header string section */
     n = rd_elf_link_genelfsec64(RD_ELF_SECHDR_TYPE_STRTAB, &h);
@@ -65,6 +67,8 @@ int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_el
     /* section header strings themselves */
     i = rd_buffer_init();
     if (!i) { n = RD_E_OOM; goto die; }
+    n = rd_buffer_push(&i, shstrtab_strnull, sizeof(shstrtab_strnull));
+    if (n != RD_E_OK) goto die;
     n = rd_buffer_push(&i, shstrtab_strtext, sizeof(shstrtab_strtext));
     if (n != RD_E_OK) goto die;
     n = rd_buffer_push(&i, shstrtab_strdata, sizeof(shstrtab_strdata));
@@ -75,35 +79,43 @@ int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_el
     /* now... the fun begins! relocations! */
     for (reloc = relocs; reloc && reloc->type != RELOC_NULL; reloc++) {
         switch (reloc->type) {
-#define rd_reloc(size, target, source) *((size *)(((unsigned char *)rd_buffer_data(c))+target)) = source;
+#define rd_reloc(size, target, source) *((size *)(((unsigned char *)rd_buffer_data(c))+target)) = (size)source;
         /* 1st type: we are relocating from the text section into the text section. */
-        /* src needs to have a->len + b->len added to it and stored at target */
-        case RELOC_TEXT8:
-            rd_reloc(uint8_t, reloc->target, a->len + b->len + reloc->src);
-            break;
-        case RELOC_TEXT16:
-            rd_reloc(uint16_t, reloc->target, a->len + b->len + reloc->src);
-            break;
+        /* src needs to have prg->vaddr + a->len + b->len added to it and stored at target */
         case RELOC_TEXT32:
-            rd_reloc(uint32_t, reloc->target, a->len + b->len + reloc->src);
+            rd_reloc(uint32_t, reloc->target, prg->vaddr + a->len + b->len + reloc->src);
             break;
         case RELOC_TEXT64:
-            rd_reloc(uint64_t, reloc->target, a->len + b->len + reloc->src);
+            rd_reloc(uint64_t, reloc->target, prg->vaddr + a->len + b->len + reloc->src);
             break;
         /* 2nd type: we are relocating from the data section into the text section. */
-        /* src needs to have a->len + b->len + c->len added to it and stored at target */
+        /* src needs to have prg->vaddr + a->len + b->len + c->len added to it and stored at target */
         case RELOC_DATA8:
-            rd_reloc(uint8_t, reloc->target, a->len + b->len + c->len + reloc->src);
+            rd_reloc(uint8_t, reloc->target, prg->vaddr + a->len + b->len + c->len + reloc->src);
             break;
         case RELOC_DATA16:
-            rd_reloc(uint16_t, reloc->target, a->len + b->len + c->len + reloc->src);
+            rd_reloc(uint16_t, reloc->target, prg->vaddr + a->len + b->len + c->len + reloc->src);
             break;
         case RELOC_DATA32:
-            rd_reloc(uint32_t, reloc->target, a->len + b->len + c->len + reloc->src);
+            rd_reloc(uint32_t, reloc->target, prg->vaddr + a->len + b->len + c->len + reloc->src);
             break;
         case RELOC_DATA64:
-            rd_reloc(uint64_t, reloc->target, a->len + b->len + c->len + reloc->src);
+            rd_reloc(uint64_t, reloc->target, prg->vaddr + a->len + b->len + c->len + reloc->src);
             break;
+        /* 3rd type: custom relocation: just write whatever value we are given */
+        case RELOC_CUSTOM8:
+            rd_reloc(uint8_t, reloc->target, reloc->src);
+            break;
+        case RELOC_CUSTOM16:
+            rd_reloc(uint16_t, reloc->target, reloc->src);
+            break;
+        case RELOC_CUSTOM32:
+            rd_reloc(uint32_t, reloc->target, reloc->src);
+            break;
+        case RELOC_CUSTOM64:
+            rd_reloc(uint64_t, reloc->target, reloc->src);
+            break;
+        /* unknown relocation type */
         default:
             n = RD_E_UNKNOWN_RELOC;
             goto die;
@@ -115,20 +127,30 @@ int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_el
     /* start with string offsets for section header names */
 
     /* null section */
-    /* null section name will point to the null after .text */
-    sec_null->name = sizeof(shstrtab_strtext)-1;
+    /* null section name will point to the first null */
+    sec_null->name = 0;
 
     /* section header string section */
     /* section header string table name will point to the right addr */
-    sec_shst->name = sizeof(shstrtab_strtext) + sizeof(shstrtab_strdata);
+    sec_shst->name = sizeof(shstrtab_strnull) + sizeof(shstrtab_strtext) + sizeof(shstrtab_strdata);
     /* offset for the data for this section is basically the entire rest of file */
     sec_shst->offset = a->len + b->len + c->len + d->len + e->len + f->len + g->len + h->len;
     /* and it is i long */
     sec_shst->size = i->len;
 
+    /* data section */
+    /* name is after .text */
+    sec_data->name = sizeof(shstrtab_strnull) + sizeof(shstrtab_strtext);
+    /* offset is after the main header, program header, and code (text) */
+    sec_data->offset = a->len + b->len + c->len;
+    /* this section will be mapped into memory at the same offset from the base memory */
+    sec_data->addr = prg->vaddr + sec_data->offset;
+    /* data length is as expected */
+    sec_data->size = d->len;
+
     /* text section */
-    /* name is just 0 since .text appears first */
-    sec_text->name = 0;
+    /* name is after the null character */
+    sec_text->name = sizeof(shstrtab_strnull);
     /* offset is after the main header and program header */
     sec_text->offset = a->len + b->len;
     /* this section will be mapped into memory at the same offset from the base memory */
@@ -234,11 +256,11 @@ __inline int rd_elf_link_genhdr64(uint16_t machine, rd_buf_t **ret) {
     /* normally there is 1 program header */
     hdr->prghdrnbr = 1;
 
-    /* normally there are 3 headers - 1 null, 1 for text (code), and 1 for section header names */
-    hdr->shdrnbr = 3;
+    /* normally there are 4 headers - 1 null, 1 for text (code), 1 for data, and 1 for section header names */
+    hdr->shdrnbr = 4;
 
-    /* section headers are at the 2nd index (0 based) */
-    hdr->snshdridx = 2;
+    /* section headers are at the 3rd index (0 based) */
+    hdr->snshdridx = 3;
 
     return RD_E_OK;
 }
@@ -299,7 +321,7 @@ __inline int rd_elf_link_genelfsec64(uint32_t type, rd_buf_t **ret) {
     /* be helpful and add some default flags if we can */
     switch (type) {
     case RD_ELF_SECHDR_TYPE_PROGBITS:
-        sec->flags = RD_ELF_SECHDR_FLAGS_ALLOC | RD_ELF_SECHDR_FLAGS_EXECINSTR;
+        sec->flags = RD_ELF_SECHDR_FLAGS_ALLOC;
         break;
     default:
         sec->flags = 0;
