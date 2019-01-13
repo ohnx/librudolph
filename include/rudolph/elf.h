@@ -1,5 +1,5 @@
-#ifndef __RDELF_INC_H
-#define __RDELF_INC_H
+#ifndef __RD_ELF_INC_H
+#define __RD_ELF_INC_H
 
 #ifdef RUDOLF_USE_STDLIB
 /* for uint types */
@@ -146,7 +146,7 @@ struct rd_elfhdr64 {
 #define RD_ELFHDR_HDRSZ_64          0x0040
 
 /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=[ program header ]=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
-struct rd_prghdr32 {
+struct rd_elf_prghdr32 {
     /* type of segment */
     uint32_t type;
 
@@ -172,7 +172,7 @@ struct rd_prghdr32 {
     uint32_t alignment;
 };
 
-struct rd_prghdr64 {
+struct rd_elf_prghdr64 {
     /* type of segment */
     uint32_t type;
 
@@ -198,26 +198,26 @@ struct rd_prghdr64 {
     uint64_t alignment;
 };
 
-#define RD_PRGHDR_TYPE_NULL         0x00000000
-#define RD_PRGHDR_TYPE_LOAD         0x00000001
-#define RD_PRGHDR_TYPE_DYNAMIC      0x00000002
-#define RD_PRGHDR_TYPE_INTERP       0x00000003
-#define RD_PRGHDR_TYPE_NOTE         0x00000004
-#define RD_PRGHDR_TYPE_SHLIB        0x00000005
-#define RD_PRGHDR_TYPE_PHDR         0x00000006
-#define RD_PRGHDR_TYPE_LOOS         0x60000000
-#define RD_PRGHDR_TYPE_HIOS         0x6fffffff
-#define RD_PRGHDR_TYPE_LOPROC       0x70000000
-#define RD_PRGHDR_TYPE_HIPROC       0x7fffffff
+#define RD_ELF_PRGHDR_TYPE_NULL         0x00000000
+#define RD_ELF_PRGHDR_TYPE_LOAD         0x00000001
+#define RD_ELF_PRGHDR_TYPE_DYNAMIC      0x00000002
+#define RD_ELF_PRGHDR_TYPE_INTERP       0x00000003
+#define RD_ELF_PRGHDR_TYPE_NOTE         0x00000004
+#define RD_ELF_PRGHDR_TYPE_SHLIB        0x00000005
+#define RD_ELF_PRGHDR_TYPE_PHDR         0x00000006
+#define RD_ELF_PRGHDR_TYPE_LOOS         0x60000000
+#define RD_ELF_PRGHDR_TYPE_HIOS         0x6fffffff
+#define RD_ELF_PRGHDR_TYPE_LOPROC       0x70000000
+#define RD_ELF_PRGHDR_TYPE_HIPROC       0x7fffffff
 
-#define RD_PRGHDR_FLAGS_X           0x00000001
-#define RD_PRGHDR_FLAGS_W           0x00000002
-#define RD_PRGHDR_FLAGS_R           0x00000004
-#define RD_PRGHDR_FLAGS_MASKOS      0x0ff00000
-#define RD_PRGHDR_FLAGS_MASKPROC    0xf0000000
+#define RD_ELF_PRGHDR_FLAGS_X           0x00000001
+#define RD_ELF_PRGHDR_FLAGS_W           0x00000002
+#define RD_ELF_PRGHDR_FLAGS_R           0x00000004
+#define RD_ELF_PRGHDR_FLAGS_MASKOS      0x0ff00000
+#define RD_ELF_PRGHDR_FLAGS_MASKPROC    0xf0000000
 
 /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=[ section header ]=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
-struct rd_sechdr32 {
+struct rd_elf_sechdr32 {
     /* offset to the name */
     uint32_t name;
 
@@ -249,7 +249,7 @@ struct rd_sechdr32 {
     uint32_t entsz;
 };
 
-struct rd_sechdr64 {
+struct rd_elf_sechdr64 {
     /* offset to the name */
     uint32_t name;
 
@@ -281,39 +281,39 @@ struct rd_sechdr64 {
     uint64_t entsz;
 };
 
-#define RD_SECHDR_TYPE_NULL             0x00000000
-#define RD_SECHDR_TYPE_PROGBITS         0x00000001
-#define RD_SECHDR_TYPE_SYMTAB           0x00000002
-#define RD_SECHDR_TYPE_STRTAB           0x00000003
-#define RD_SECHDR_TYPE_RELA             0x00000004
-#define RD_SECHDR_TYPE_HASH             0x00000005
-#define RD_SECHDR_TYPE_DYNAMIC          0x00000006
-#define RD_SECHDR_TYPE_NOTE             0x00000007
-#define RD_SECHDR_TYPE_NOBITS           0x00000008
-#define RD_SECHDR_TYPE_REL              0x00000009
-#define RD_SECHDR_TYPE_SHLIB            0x0000000a
-#define RD_SECHDR_TYPE_DYNSYM           0x0000000b
-#define RD_SECHDR_TYPE_INITARRAY        0x0000000e
-#define RD_SECHDR_TYPE_FINIARRAY        0x0000000f
-#define RD_SECHDR_TYPE_PREINITARRAY     0x00000010
-#define RD_SECHDR_TYPE_GROUP            0x00000011
-#define RD_SECHDR_TYPE_SYMTAB_SHDIDX    0x00000012
-#define RD_SECHDR_TYPE_NUM              0x00000013
-#define RD_SECHDR_TYPE_LOOS             0x60000000
+#define RD_ELF_SECHDR_TYPE_NULL             0x00000000
+#define RD_ELF_SECHDR_TYPE_PROGBITS         0x00000001
+#define RD_ELF_SECHDR_TYPE_SYMTAB           0x00000002
+#define RD_ELF_SECHDR_TYPE_STRTAB           0x00000003
+#define RD_ELF_SECHDR_TYPE_RELA             0x00000004
+#define RD_ELF_SECHDR_TYPE_HASH             0x00000005
+#define RD_ELF_SECHDR_TYPE_DYNAMIC          0x00000006
+#define RD_ELF_SECHDR_TYPE_NOTE             0x00000007
+#define RD_ELF_SECHDR_TYPE_NOBITS           0x00000008
+#define RD_ELF_SECHDR_TYPE_REL              0x00000009
+#define RD_ELF_SECHDR_TYPE_SHLIB            0x0000000a
+#define RD_ELF_SECHDR_TYPE_DYNSYM           0x0000000b
+#define RD_ELF_SECHDR_TYPE_INITARRAY        0x0000000e
+#define RD_ELF_SECHDR_TYPE_FINIARRAY        0x0000000f
+#define RD_ELF_SECHDR_TYPE_PREINITARRAY     0x00000010
+#define RD_ELF_SECHDR_TYPE_GROUP            0x00000011
+#define RD_ELF_SECHDR_TYPE_SYMTAB_SHDIDX    0x00000012
+#define RD_ELF_SECHDR_TYPE_NUM              0x00000013
+#define RD_ELF_SECHDR_TYPE_LOOS             0x60000000
 
-#define RD_SECHDR_FLAGS_WRITE           0x00000001
-#define RD_SECHDR_FLAGS_ALLOC           0x00000002
-#define RD_SECHDR_FLAGS_EXECINSTR       0x00000004
-#define RD_SECHDR_FLAGS_MERGE           0x00000010
-#define RD_SECHDR_FLAGS_STRINGS         0x00000020
-#define RD_SECHDR_FLAGS_INFO_LINK       0x00000040
-#define RD_SECHDR_FLAGS_LINK_ORDER      0x00000080
-#define RD_SECHDR_FLAGS_OS_NONCONFRM    0x00000100
-#define RD_SECHDR_FLAGS_GROUP           0x00000200
-#define RD_SECHDR_FLAGS_TLS             0x00000400
-#define RD_SECHDR_FLAGS_ORDERED         0x04000000
-#define RD_SECHDR_FLAGS_EXCLUDE         0x08000000
-#define RD_SECHDR_FLAGS_MASKOS          0x0ff00000
-#define RD_SECHDR_FLAGS_MASKPROC        0xf0000000
+#define RD_ELF_SECHDR_FLAGS_WRITE           0x00000001
+#define RD_ELF_SECHDR_FLAGS_ALLOC           0x00000002
+#define RD_ELF_SECHDR_FLAGS_EXECINSTR       0x00000004
+#define RD_ELF_SECHDR_FLAGS_MERGE           0x00000010
+#define RD_ELF_SECHDR_FLAGS_STRINGS         0x00000020
+#define RD_ELF_SECHDR_FLAGS_INFO_LINK       0x00000040
+#define RD_ELF_SECHDR_FLAGS_LINK_ORDER      0x00000080
+#define RD_ELF_SECHDR_FLAGS_OS_NONCONFRM    0x00000100
+#define RD_ELF_SECHDR_FLAGS_GROUP           0x00000200
+#define RD_ELF_SECHDR_FLAGS_TLS             0x00000400
+#define RD_ELF_SECHDR_FLAGS_ORDERED         0x04000000
+#define RD_ELF_SECHDR_FLAGS_EXCLUDE         0x08000000
+#define RD_ELF_SECHDR_FLAGS_MASKOS          0x0ff00000
+#define RD_ELF_SECHDR_FLAGS_MASKPROC        0xf0000000
 
-#endif /* __RDELF_INC_H */
+#endif /* __RD_ELF_INC_H */

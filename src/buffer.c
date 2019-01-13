@@ -1,4 +1,5 @@
 #include <rudolph/buffer.h>
+#include <rudolph/error.h>
 
 #ifdef RUDOLF_USE_STDLIB
 /* for malloc(), free(), realloc() */
@@ -42,23 +43,23 @@ int rd_buffer_push(rd_buf_t **pbuf, const unsigned char *data, size_t len) {
     void *t;
 
     /* sanity check */
-    if (!pbuf) return RD_E_BUF_NONSENSE;
+    if (!pbuf) return RD_E_NONSENSE;
     if (!(*pbuf)) {
         /* allocate space for new buffer */
         *pbuf = rd_buffer_init();
-        if (!(*pbuf)) return RD_E_BUF_OOM;
+        if (!(*pbuf)) return RD_E_OOM;
     }
 
     /* first check the remaining space */
     d = (*pbuf)->len + len;
     if (len > d || (*pbuf)->len > d) {
-        return RD_E_BUF_OVERFLOW;
+        return RD_E_OVERFLOW;
     }
 
     /* check if realloc needed */
     if (d > (*pbuf)->alloc) {
         t = realloc(*pbuf, sizeof(*(*pbuf)) + (*pbuf)->alloc*2);
-        if (t == NULL) return RD_E_BUF_OOM;
+        if (t == NULL) return RD_E_OOM;
         *pbuf = (rd_buf_t *)t;
     }
 
@@ -68,7 +69,7 @@ int rd_buffer_push(rd_buf_t **pbuf, const unsigned char *data, size_t len) {
     /* increment length */
     (*pbuf)->len = d;
 
-    return RD_E_BUF_OK;
+    return RD_E_OK;
 }
 
 int rd_buffer_merge(rd_buf_t **pbuf, size_t n, ...) {
@@ -78,11 +79,11 @@ int rd_buffer_merge(rd_buf_t **pbuf, size_t n, ...) {
     int z;
 
     /* sanity check */
-    if (!pbuf) return RD_E_BUF_NONSENSE;
+    if (!pbuf) return RD_E_NONSENSE;
 
     /* allocate space for new buffer */
     q = rd_buffer_init();
-    if (!q) return RD_E_BUF_OOM;
+    if (!q) return RD_E_OOM;
 
     /* copy over the old buffer if necessary */
     if (*pbuf) rd_buffer_push(&q, rd_buffer_data(*pbuf), (*pbuf)->len);
@@ -100,13 +101,13 @@ int rd_buffer_merge(rd_buf_t **pbuf, size_t n, ...) {
         if (z) goto done;
     }
 
-    /* z = RD_E_BUF_OK means no error */
-    z = RD_E_BUF_OK;
+    /* z = RD_E_OK means no error */
+    z = RD_E_OK;
 
 done:
     va_end(args);
 
-    if (z < RD_E_BUF_OK) {
+    if (z < RD_E_OK) {
         /* errored out */
 
         /* free the buffer */
@@ -148,9 +149,9 @@ int main() {
 
     fprintf(stderr, "testing buffer.c...\t");
 
-    if (rd_buffer_push(&m, "potat|o", 5) != RD_E_BUF_OK) die(__LINRD_E__);
-    if (rd_buffer_push(&q, "o", 2) != RD_E_BUF_OK) die(__LINRD_E__);
-    if (rd_buffer_merge(&r, 2, m, q) != RD_E_BUF_OK) die(__LINRD_E__);
+    if (rd_buffer_push(&m, "potat|o", 5) != RD_E_OK) die(__LINRD_E__);
+    if (rd_buffer_push(&q, "o", 2) != RD_E_OK) die(__LINRD_E__);
+    if (rd_buffer_merge(&r, 2, m, q) != RD_E_OK) die(__LINRD_E__);
     if (strncmp("potato",rd_buffer_data(r),r->len)) die(__LINRD_E__);
 
     free(m);

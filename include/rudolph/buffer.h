@@ -1,5 +1,5 @@
-#ifndef __BUFFER_H_INC
-#define __BUFFER_H_INC
+#ifndef __RD_BUFFER_H_INC
+#define __RD_BUFFER_H_INC
 #ifdef RUDOLF_USE_STDLIB
 /* for size_t */
 #include <stddef.h>
@@ -8,11 +8,6 @@
 #endif
 
 #define __RD_BUF_DEFAULT 256
-
-#define RD_E_BUF_OK         0
-#define RD_E_BUF_OVERFLOW   -1
-#define RD_E_BUF_OOM        -2
-#define RD_E_BUF_NONSENSE   -4
 
 #define rd_buffer_data(x) (unsigned char *)(x+1)
 
@@ -33,4 +28,4 @@ int rd_buffer_merge(rd_buf_t **pbuf, size_t n, ...);
 /* reset the length of the buffer */
 void rd_buffer_reset(rd_buf_t *buf);
 
-#endif /* __BUFFER_H_INC */
+#endif /* __RD_BUFFER_H_INC */
