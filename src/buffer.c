@@ -61,10 +61,11 @@ int rd_buffer_push(rd_buf_t **pbuf, const unsigned char *data, size_t len) {
         t = realloc(*pbuf, sizeof(*(*pbuf)) + (*pbuf)->alloc*2);
         if (t == NULL) return RD_E_OOM;
         *pbuf = (rd_buf_t *)t;
+        (*pbuf)->alloc *= 2;
     }
 
     /* copy over the data */
-    memcpy(rd_buffer_data(*pbuf)+(*pbuf)->len, data, len);
+    memcpy(rd_buffer_data(*pbuf) + (*pbuf)->len, data, len);
 
     /* increment length */
     (*pbuf)->len = d;
