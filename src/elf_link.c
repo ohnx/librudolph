@@ -243,17 +243,21 @@ int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, size_t bss_l
         /* 2nd type: we are relocating from the data section into the text section. */
         /* src needs to have sec_data->addr added to it and stored at target */
         case RELOC_DATA32:
+            if (!sec_data) { n = RD_E_UNKNOWN_RELOC; goto die; }
             rd_reloc(uint32_t, reloc->target, sec_data->addr + reloc->src);
             break;
         case RELOC_DATA64:
+            if (!sec_data) { n = RD_E_UNKNOWN_RELOC; goto die; }
             rd_reloc(uint64_t, reloc->target, sec_data->addr + reloc->src);
             break;
         /* 3rd type: we are relocating from the bss section into the text section. */
         /* src needs to have sec_bss->addr added to it and stored at target */
         case RELOC_BSS32:
+            if (!sec_bss) { n = RD_E_UNKNOWN_RELOC; goto die; }
             rd_reloc(uint32_t, reloc->target, sec_bss->addr + reloc->src);
             break;
         case RELOC_BSS64:
+            if (!sec_bss) { n = RD_E_UNKNOWN_RELOC; goto die; }
             rd_reloc(uint64_t, reloc->target, sec_bss->addr + reloc->src);
             break;
         /* 4th type: custom relocation: just write whatever value we are given */
