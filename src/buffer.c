@@ -57,7 +57,7 @@ int rd_buffer_push(rd_buf_t **pbuf, const unsigned char *data, size_t len) {
     }
 
     /* check if realloc needed */
-    if (d > (*pbuf)->alloc) {
+    while (d > (*pbuf)->alloc) {
         t = realloc(*pbuf, sizeof(*(*pbuf)) + (*pbuf)->alloc*2);
         if (t == NULL) return RD_E_OOM;
         *pbuf = (rd_buf_t *)t;

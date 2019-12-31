@@ -2,24 +2,29 @@
 #include <rudolph/elf.h>
 #include <rudolph/buffer.h>
 #include <rudolph/error.h>
+#include <string.h>
 
 /* TODO - allow custom base_addr's other than 4MiB?? */
-int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_elf_link_relocation *relocs, rd_buf_t **res) {
+/* TODO: proper memory alignment of 4 bytes instead of 1? */
+int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, size_t bss_len, struct rd_elf_link_relocation *relocs, rd_buf_t **res) {
     int n;
-    rd_buf_t *a, *b, *c, *d, *e, *f, *g, *h, *i;
+    size_t fdsec;
+    rd_buf_t *a, *b, *c, *d, *e, *f, *g, *h, *i, *j, *k, *l;
     struct rd_elfhdr64 *hdr;
-    struct rd_elf_prghdr64 *prg;
-    struct rd_elf_sechdr64 *sec_null, *sec_text, *sec_data, *sec_shst;
+    struct rd_elf_prghdr64 *prg, *prg_rw;
+    struct rd_elf_sechdr64 *sec_null, *sec_text, *sec_data, *sec_bss, *sec_shst;
     static const unsigned char shstrtab_strnull[] = "";
     static const unsigned char shstrtab_strtext[] = ".text";
     static const unsigned char shstrtab_strdata[] = ".data";
+    static const unsigned char shstrtab_strbss[] = ".bss";
     static const unsigned char shstrtab_strshst[] = ".shstrtab";
     struct rd_elf_link_relocation *reloc;
 
     if (!res) { return RD_E_NONSENSE; }
 
     /* initialize variables */
-    a = NULL; b = NULL; c = NULL; d = NULL; e = NULL; f = NULL; g = NULL; h = NULL; i = NULL;
+    a = NULL; b = NULL; c = NULL; d = NULL; e = NULL; f = NULL; g = NULL;
+    h = NULL; i = NULL; j = NULL; k = NULL; l = NULL;
 
     /* first, the header */
     n = rd_elf_link_genhdr64(machine, &a);
@@ -51,11 +56,55 @@ int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_el
     sec_text = (struct rd_elf_sechdr64 *)rd_buffer_data(f);
     sec_text->flags |= RD_ELF_SECHDR_FLAGS_EXECINSTR;
 
-    /* data section */
-    n = rd_elf_link_genelfsec64(RD_ELF_SECHDR_TYPE_PROGBITS, &g);
-    if (n != RD_E_OK) goto die;
-    sec_data = (struct rd_elf_sechdr64 *)rd_buffer_data(g);
-    sec_data->flags |= RD_ELF_SECHDR_FLAGS_WRITE;
+    hdr->shdrnbr--;
+    hdr->snshdridx--;
+
+    /* data section, if applicable */
+    if (d->len) {
+        /* data section */
+        n = rd_elf_link_genelfsec64(RD_ELF_SECHDR_TYPE_PROGBITS, &g);
+        if (n != RD_E_OK) goto die;
+        sec_data = (struct rd_elf_sechdr64 *)rd_buffer_data(g);
+        sec_data->flags |= RD_ELF_SECHDR_FLAGS_WRITE;
+
+        /* modify the number of section headers in the program */
+        hdr->shdrnbr++;
+        hdr->snshdridx++;
+    } else {
+        g = rd_buffer_init();
+        sec_data = NULL;
+    }
+
+    /* bss section, if applicable */
+    if (bss_len > 0) {
+        /* bss section */
+        n = rd_elf_link_genelfsec64(RD_ELF_SECHDR_TYPE_NOBITS, &j);
+        if (n != RD_E_OK) goto die;
+        sec_bss = (struct rd_elf_sechdr64 *)rd_buffer_data(j);
+        sec_bss->flags |= RD_ELF_SECHDR_FLAGS_ALLOC | RD_ELF_SECHDR_FLAGS_WRITE;
+        sec_bss->size = bss_len;
+
+        /* modify the number of section headers in the program */
+        hdr->shdrnbr++;
+        hdr->snshdridx++;
+    } else {
+        j = rd_buffer_init();
+        sec_bss = NULL;
+    }
+
+    /* also update the program headers if necessary */
+    if (sec_data || sec_bss) {
+        /* we either have a data section or a bss section so we need a RW program header */
+        n = rd_elf_link_genelfprg64(RD_ELF_PRGHDR_TYPE_LOAD, RD_ELF_PRGHDR_FLAGS_W | RD_ELF_PRGHDR_FLAGS_R, &k);
+        if (n != RD_E_OK) goto die;
+        prg_rw = (struct rd_elf_prghdr64 *)rd_buffer_data(k);
+
+        /* modify the number of program headers in the program */
+        hdr->prghdrnbr++;
+    } else {
+        k = rd_buffer_init();
+        prg_rw = NULL;
+    }
 
     /* section header string section */
     n = rd_elf_link_genelfsec64(RD_ELF_SECHDR_TYPE_STRTAB, &h);
@@ -69,38 +118,145 @@ int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_el
     if (n != RD_E_OK) goto die;
     n = rd_buffer_push(&i, shstrtab_strtext, sizeof(shstrtab_strtext));
     if (n != RD_E_OK) goto die;
-    n = rd_buffer_push(&i, shstrtab_strdata, sizeof(shstrtab_strdata));
-    if (n != RD_E_OK) goto die;
+    if (sec_data) {
+        n = rd_buffer_push(&i, shstrtab_strdata, sizeof(shstrtab_strdata));
+        if (n != RD_E_OK) goto die;
+    }
+    if (sec_bss) {
+        n = rd_buffer_push(&i, shstrtab_strbss, sizeof(shstrtab_strbss));
+        if (n != RD_E_OK) goto die;
+    }
     n = rd_buffer_push(&i, shstrtab_strshst, sizeof(shstrtab_strshst));
     if (n != RD_E_OK) goto die;
+
+    /* done relocating! time to write in all the values now that we know them */
+    /* start with string offsets for section header names */
+
+    /* null section */
+    /* null section name will point to the first null */
+    sec_null->name = 0;
+
+    /* section header string section */
+    /* section header string table name will point to the right addr */
+    sec_shst->name = sizeof(shstrtab_strnull) + sizeof(shstrtab_strtext);
+    /* offset for the data for this section is basically the entire rest of file */
+    sec_shst->offset = a->len + b->len + k->len + c->len + d->len + e->len + f->len + g->len + j->len + h->len;
+    /* and it is i long */
+    sec_shst->size = i->len;
+
+    /* bss section */
+    if (sec_bss) {
+        /* adjust shst name location */
+        sec_shst->name += sizeof(shstrtab_strbss);
+        /* name is after .text or .data */
+        sec_bss->name = sizeof(shstrtab_strnull) + sizeof(shstrtab_strtext);
+        /* offset is after the main header, program header, code (text), and data */
+        sec_bss->offset = a->len + b->len + k->len + c->len + d->len;
+        /* this section will be mapped into memory at the same offset from the base memory */
+        sec_bss->addr = prg->vaddr + sec_bss->offset;
+    }
+
+    /* data section */
+    if (sec_data) {
+        /* adjust shst name location */
+        sec_shst->name += sizeof(shstrtab_strdata);
+        /* adjust bss name location */
+        if (sec_bss) sec_bss->name += sizeof(shstrtab_strdata);
+        /* name is after .text */
+        sec_data->name = sizeof(shstrtab_strnull) + sizeof(shstrtab_strtext);
+        /* offset is after the main header, program header, and code (text) */
+        sec_data->offset = a->len + b->len + k->len + c->len;
+        /* this section will be mapped into memory at the same offset from the base memory */
+        sec_data->addr = prg->vaddr + sec_data->offset;
+        /* data length is as expected */
+        sec_data->size = d->len;
+    }
+
+    /* text section */
+    /* name is after the null character */
+    sec_text->name = sizeof(shstrtab_strnull);
+    /* offset is after the main header and program headers */
+    sec_text->offset = a->len + b->len + k->len;
+    /* this section will be mapped into memory at the same offset from the base memory */
+    sec_text->addr = prg->vaddr + sec_text->offset;
+    /* code length is as expected */
+    sec_text->size = c->len;
+
+    /* program header */
+    /* only bother loading the interesting parts (ignore section headers) */
+    prg->size_file = a->len + b->len + c->len + k->len;
+    /* size in memory is the same as size on the file */
+    prg->size_mem = prg->size_file;
+
+    /* calculate where the prg_rw will be in memory */
+    fdsec = prg->vaddr + prg->size_mem;
+    if (prg_rw) {
+        /* adjust fdsec to be aligned on the nearest alignment */
+        fdsec = ((fdsec + prg_rw->alignment) & (~(prg_rw->alignment - 1)));
+
+        /* set the values for the read/write area program header */
+        prg_rw->offset = (prg->offset + prg->size_file + prg_rw->alignment) & (~(prg_rw->alignment - 1));
+        prg_rw->vaddr = prg_rw->paddr = fdsec;
+        prg_rw->size_file = 0;
+        prg_rw->size_mem = 0;
+
+        /* set the correct starting address for data/bss sections */
+        if (sec_data) {
+            /* build a buffer to pad the space between .text and .data in the file */
+            l = rd_buffer_initsz(prg_rw->offset - (prg->offset + prg->size_file));
+            l->len = l->alloc;
+            memset(rd_buffer_data(l), 0, l->alloc);
+            sec_data->addr = fdsec;
+            prg_rw->size_file += sec_data->size;
+            prg_rw->size_mem += sec_data->size;
+
+            if (sec_bss) {
+                sec_bss->addr = sec_data->addr + sec_data->size;
+                prg_rw->size_mem += sec_bss->size;
+            }
+
+            /* adjust offsets of everything after padding l, too */
+            /* d, e, f, g, j, h, i */
+            sec_shst->offset += l->len;
+            sec_data->offset += l->len;
+            if (sec_bss) sec_bss->offset += l->len;
+        } else {
+            /* only bss */
+            sec_bss->addr = fdsec;
+            prg_rw->size_mem += sec_bss->size;
+            l = rd_buffer_init();
+        }
+    }
 
     /* now... the fun begins! relocations! */
     for (reloc = relocs; reloc && reloc->type != RELOC_NULL; reloc++) {
         switch (reloc->type) {
-#define rd_reloc(size, target, source) *((size *)(((unsigned char *)rd_buffer_data(c))+target)) = (size)source;
+#define rd_reloc(size, target, source) *((size *)(((unsigned char *)rd_buffer_data(c))+target)) = (size)(source);
         /* 1st type: we are relocating from the text section into the text section. */
-        /* src needs to have prg->vaddr + a->len + b->len added to it and stored at target */
+        /* src needs to have sec_text->addr added to it and stored at target */
         case RELOC_TEXT32:
-            rd_reloc(uint32_t, reloc->target, prg->vaddr + a->len + b->len + reloc->src);
+            rd_reloc(uint32_t, reloc->target, sec_text->addr + reloc->src);
             break;
         case RELOC_TEXT64:
-            rd_reloc(uint64_t, reloc->target, prg->vaddr + a->len + b->len + reloc->src);
+            rd_reloc(uint64_t, reloc->target, sec_text->addr + reloc->src);
             break;
         /* 2nd type: we are relocating from the data section into the text section. */
-        /* src needs to have prg->vaddr + a->len + b->len + c->len added to it and stored at target */
-        case RELOC_DATA8:
-            rd_reloc(uint8_t, reloc->target, prg->vaddr + a->len + b->len + c->len + reloc->src);
-            break;
-        case RELOC_DATA16:
-            rd_reloc(uint16_t, reloc->target, prg->vaddr + a->len + b->len + c->len + reloc->src);
-            break;
+        /* src needs to have sec_data->addr added to it and stored at target */
         case RELOC_DATA32:
-            rd_reloc(uint32_t, reloc->target, prg->vaddr + a->len + b->len + c->len + reloc->src);
+            rd_reloc(uint32_t, reloc->target, sec_data->addr + reloc->src);
             break;
         case RELOC_DATA64:
-            rd_reloc(uint64_t, reloc->target, prg->vaddr + a->len + b->len + c->len + reloc->src);
+            rd_reloc(uint64_t, reloc->target, sec_data->addr + reloc->src);
             break;
-        /* 3rd type: custom relocation: just write whatever value we are given */
+        /* 3rd type: we are relocating from the bss section into the text section. */
+        /* src needs to have sec_bss->addr added to it and stored at target */
+        case RELOC_BSS32:
+            rd_reloc(uint32_t, reloc->target, sec_bss->addr + reloc->src);
+            break;
+        case RELOC_BSS64:
+            rd_reloc(uint64_t, reloc->target, sec_bss->addr + reloc->src);
+            break;
+        /* 4th type: custom relocation: just write whatever value we are given */
         case RELOC_CUSTOM8:
             rd_reloc(uint8_t, reloc->target, reloc->src);
             break;
@@ -121,58 +277,27 @@ int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_el
         }
     }
 
-    /* done relocating! time to write in all the values now that we know them */
-    /* start with string offsets for section header names */
-
-    /* null section */
-    /* null section name will point to the first null */
-    sec_null->name = 0;
-
-    /* section header string section */
-    /* section header string table name will point to the right addr */
-    sec_shst->name = sizeof(shstrtab_strnull) + sizeof(shstrtab_strtext) + sizeof(shstrtab_strdata);
-    /* offset for the data for this section is basically the entire rest of file */
-    sec_shst->offset = a->len + b->len + c->len + d->len + e->len + f->len + g->len + h->len;
-    /* and it is i long */
-    sec_shst->size = i->len;
-
-    /* data section */
-    /* name is after .text */
-    sec_data->name = sizeof(shstrtab_strnull) + sizeof(shstrtab_strtext);
-    /* offset is after the main header, program header, and code (text) */
-    sec_data->offset = a->len + b->len + c->len;
-    /* this section will be mapped into memory at the same offset from the base memory */
-    sec_data->addr = prg->vaddr + sec_data->offset;
-    /* data length is as expected */
-    sec_data->size = d->len;
-
-    /* text section */
-    /* name is after the null character */
-    sec_text->name = sizeof(shstrtab_strnull);
-    /* offset is after the main header and program header */
-    sec_text->offset = a->len + b->len;
-    /* this section will be mapped into memory at the same offset from the base memory */
-    sec_text->addr = prg->vaddr + sec_text->offset;
-    /* code length is as expected */
-    sec_text->size = c->len;
-
-    /* program header */
-    /* only bother loading the interesting parts (ignore section headers) */
-    prg->size_file = a->len + b->len + c->len + d->len;
-    /* size in memory is the same as size on the file unless we have bss (we don't) */
-    prg->size_mem = prg->size_file;
-
     /* main elf header */
     /* entrypoint is at sec_text address */
     hdr->entry = sec_text->addr;
     /* program headers are located after this header */
     hdr->proghdr = a->len;
-    /* section headers are located after a,b,c,d */
-    hdr->sectionhdr = a->len + b->len + c->len + d->len;
+    /* section headers are located after a,b,k,c,d (program headers and code) */
+    hdr->sectionhdr = a->len + b->len + k->len + c->len + l->len + d->len;
 
     /* ... and finally, join all the buffers together! */
     if (*res) *res = rd_buffer_init();
-    n = rd_buffer_merge(res, 9, a, b, c, d, e, f, g, h, i);
+    n = rd_buffer_merge(res, 12, a, b, k, c, l, d, e, f, g, j, h, i);
+
+    /* TODO: make bss work.
+    
+    Will need to:
+
+    * Think over again how stuff works... where exactly is stuff in memory?!?
+    * Fix section header strings
+    * Add a new program header for bss that is R/W, 0 size in file, and blah size in memory
+    
+    */
 
 die:
     if (a) rd_buffer_free(a);
@@ -184,6 +309,9 @@ die:
     if (g) rd_buffer_free(g);
     if (h) rd_buffer_free(h);
     if (i) rd_buffer_free(i);
+    if (j) rd_buffer_free(j);
+    if (k) rd_buffer_free(k);
+    if (l) rd_buffer_free(l);
 
     return n;
 }
@@ -273,12 +401,6 @@ int rd_elf_link32(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_el
             break;
         /* 2nd type: we are relocating from the data section into the text section. */
         /* src needs to have prg->vaddr + a->len + b->len + c->len added to it and stored at target */
-        case RELOC_DATA8:
-            rd_reloc(uint8_t, reloc->target, prg->vaddr + a->len + b->len + c->len + reloc->src);
-            break;
-        case RELOC_DATA16:
-            rd_reloc(uint16_t, reloc->target, prg->vaddr + a->len + b->len + c->len + reloc->src);
-            break;
         case RELOC_DATA32:
             rd_reloc(uint32_t, reloc->target, prg->vaddr + a->len + b->len + c->len + reloc->src);
             break;
@@ -560,8 +682,8 @@ __inline int rd_elf_link_genelfprg64(uint32_t type, uint32_t flags, rd_buf_t **r
     /* tbd; size of the block in memory */
     prg->size_mem = 0;
 
-    /* align to the nearest 2MiB block - TODO isn't this just the page boundary? */
-    prg->alignment = 0x200000;
+    /* align to the nearest 4KiB block (page boundary) */
+    prg->alignment = 0x1000;
 
     return RD_E_OK;
 }
@@ -596,8 +718,8 @@ __inline int rd_elf_link_genelfprg32(uint32_t type, uint32_t flags, rd_buf_t **r
     /* tbd; size of the block in memory */
     prg->size_mem = 0;
 
-    /* align to the nearest 2MiB block - TODO isn't this just the page boundary? */
-    prg->alignment = 0x200000;
+    /* align to the nearest 4KiB block (page boundary) */
+    prg->alignment = 0x1000;
 
     return RD_E_OK;
 }
@@ -702,3 +824,4 @@ __inline int rd_elf_link_genelfsec32(uint32_t type, rd_buf_t **ret) {
 }
 
 #undef rd_allocbuf
+

@@ -15,10 +15,10 @@ enum rd_elf_link_relocation_type {
     RELOC_NULL = 0,     /* used to signify end of list */
     RELOC_TEXT32,       /* an absolute text relocation will fill in an address to the text (code) */
     RELOC_TEXT64,       /* an absolute text relocation will fill in an address to the text (code) */
-    RELOC_DATA8,        /* a data relocation will fill in an address to the data */
-    RELOC_DATA16,       /* a data relocation will fill in an address to the data */
     RELOC_DATA32,       /* a data relocation will fill in an address to the data */
     RELOC_DATA64,       /* a data relocation will fill in an address to the data */
+    RELOC_BSS32,        /* a bss relocation will fill in an address to bss */
+    RELOC_BSS64,        /* a bss relocation will fill in an address to bss */
     RELOC_CUSTOM8,      /* a custom relocation will write src to target */
     RELOC_CUSTOM16,     /* a custom relocation will write src to target */
     RELOC_CUSTOM32,     /* a custom relocation will write src to target */
@@ -37,7 +37,7 @@ struct rd_elf_link_relocation {
 };
 
 
-int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, struct rd_elf_link_relocation *relocs, rd_buf_t **res);
+int rd_elf_link64(uint16_t machine, rd_buf_t *text, rd_buf_t *data, size_t bss_len, struct rd_elf_link_relocation *relocs, rd_buf_t **res);
 __inline int rd_elf_link_genhdr64(uint16_t machine, rd_buf_t **ret);
 __inline int rd_elf_link_genelfprg64(uint32_t type, uint32_t flags, rd_buf_t **ret);
 __inline int rd_elf_link_genelfsec64(uint32_t type, rd_buf_t **ret);
